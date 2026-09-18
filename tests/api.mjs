@@ -20,5 +20,28 @@ const crossOrigin=await fetch(base+'/api/chat/channels',{method:'POST',headers:{
 async function readEvents(user,after,duration=8000){const ac=new AbortController();const timer=setTimeout(()=>ac.abort(),duration);let text='';try{const r=await fetch(base+'/api/events?after='+after,{headers:who(user),signal:ac.signal});assert.equal(r.status,200);const reader=r.body.getReader();while(true){const x=await reader.read();if(x.done)break;text+=new TextDecoder().decode(x.value);}}catch(e){if(e.name!=='AbortError')throw e;}finally{clearTimeout(timer)}return text;}
 const thirdEvents=await readEvents('charlie',0);assert(!thirdEvents.includes('DMの秘密'));assert(thirdEvents.includes('こんにちは'));
 const bobEvents=await readEvents('bob',first.message.seq);assert(bobEvents.includes('DMの秘密'));assert(!bobEvents.includes('こんにちは'));
-console.log('PASS: anonymous rejection, channel send, durable history, idempotent retry, conflict rejection, DM uniqueness, third-party DM isolation, SSE isolation/replay, CSRF');
+const editPath=`/api/chat/channels/${channel.id}/update`;
+const deletePath=`/api/chat/channels/${channel.id}/delete`;
+await call('bob',editPath,{name:'侵入',topic:''},403);
+await call('bob',deletePath,{confirmName:'侵入'},403);
+await call('alice',editPath,{name:'###',topic:''},400);
+await call('alice',editPath,{name:'new-name',topic:'x'.repeat(201)},400);
+await call('alice',`/api/chat/channels/${dm.id}/delete`,{confirmName:''},400);
+await call('alice',editPath,{name:'renamed-test',topic:'新しい説明'});
+const renamed=(await call('bob','/api/chat/bootstrap')).rooms.find(r=>r.id===channel.id);
+assert.equal(renamed.name,'renamed-test');assert.equal(renamed.topic,'新しい説明');assert.equal(renamed.creator,'alice');
+assert((await call('bob',`/api/chat/rooms/${channel.id}/messages`)).messages.some(m=>m.id===first.message.id));
+await call('alice',deletePath,{confirmName:'wrong'},409);
+await call('alice',deletePath,{confirmName:'renamed-test'});
+await call('alice',deletePath,{confirmName:'renamed-test'});
+await call('alice',editPath,{name:'resurrect',topic:''},404);
+await call('bob',`/api/chat/rooms/${channel.id}/messages`,undefined,404);
+await call('alice',`/api/chat/rooms/${channel.id}/messages`,{body:'after deletion',clientId:crypto.randomUUID()},404);
+assert(!(await call('alice','/api/chat/bootstrap')).rooms.some(r=>r.id===channel.id));
+assert((await call('bob',`/api/chat/rooms/${dm.id}/messages`)).messages.some(m=>m.id===secret.message.id));
+// Local test database only: seed channels must not reappear on bootstrap.
+const seeded=(await call('alice','/api/chat/bootstrap')).rooms.find(r=>r.id==='channel-random');
+if(seeded){await call(seeded.creator,'/api/chat/channels/channel-random/delete',{confirmName:seeded.name});}
+assert(!(await call('charlie','/api/chat/bootstrap')).rooms.some(r=>r.id==='channel-random'));
+console.log('PASS: authentication, messages, retry, DM isolation, SSE replay, CSRF, creator-only edit/delete, validation, permanent deletion, seed tombstones, unrelated history preserved');
 

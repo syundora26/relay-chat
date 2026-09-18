@@ -13,7 +13,7 @@ export async function initialize(user:{id:string,name:string}){
   ...[['general','全員へのお知らせや、チームの共有事項はこちら。'],['development','開発の相談、進捗、アイデアを共有しましょう。'],['random','ちょっとした雑談も、チームをつなぐきっかけに。']].map(([name,topic])=>db.prepare("INSERT OR IGNORE INTO rooms(id,kind,name,topic,creator,created_at) VALUES(?,'channel',?,?,?,?)").bind('channel-'+name,name,topic,user.id,now))
  ]);
 }
-export const roomAccess="(r.kind='channel' OR EXISTS(SELECT 1 FROM members a WHERE a.room_id=r.id AND a.user_id=?))";
+export const roomAccess="r.deleted_at IS NULL AND (r.kind='channel' OR EXISTS(SELECT 1 FROM members a WHERE a.room_id=r.id AND a.user_id=?))";
 export async function assertRoom(roomId:string,userId:string){
  const room=await database().prepare(`SELECT r.* FROM rooms r WHERE r.id=? AND ${roomAccess}`).bind(roomId,userId).first();
  if(!room)throw new ChatError(404,'この会話は見つからないか、アクセスできません。');return room;

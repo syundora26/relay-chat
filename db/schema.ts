@@ -6,6 +6,7 @@ export const rooms = sqliteTable('rooms', {
   id: text('id').primaryKey(), kind: text('kind', {enum:['channel','dm']}).notNull(),
   name: text('name').notNull(), topic: text('topic').notNull().default(''),
   pairKey: text('pair_key'), creator: text('creator').notNull().references(()=>users.id),
+  deletedAt: integer('deleted_at'),
   createdAt: integer('created_at').notNull(),
 }, t => [uniqueIndex('rooms_pair').on(t.pairKey)]);
 export const members = sqliteTable('members', {

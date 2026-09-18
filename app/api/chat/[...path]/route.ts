@@ -1,4 +1,4 @@
-import { assertRoom, body, ChatError, database, fail, identity, initialize, input, json, messageSelect, roomAccess, sameOrigin } from '@/lib/chat';
+import { assertRoom, body, canManageChannel, ChatError, database, fail, identity, initialize, input, json, messageSelect, roomAccess, sameOrigin } from '@/lib/chat';
 export const dynamic='force-dynamic';
 export async function GET(request:Request){
  try{
@@ -9,7 +9,7 @@ export async function GET(request:Request){
     (SELECT u.name FROM members mm JOIN users u ON u.id=mm.user_id WHERE mm.room_id=r.id AND mm.user_id<>? LIMIT 1) AS peerName,
     (SELECT COALESCE(MAX(seq),0) FROM messages WHERE room_id=r.id) AS lastSeq
     FROM rooms r WHERE ${roomAccess} ORDER BY r.kind,r.created_at,r.name`).bind(user.id,user.id).all();
-   const people=await db.prepare('SELECT id,name FROM users ORDER BY name').all();return json({user,rooms:rooms.results,people:people.results});
+   const people=await db.prepare('SELECT id,name FROM users ORDER BY name').all();return json({user,rooms:rooms.results.map(r=>({...r,canManage:canManageChannel(r as {id:unknown;kind:unknown;creator:unknown},user)})),people:people.results});
   }
   if(part[0]==='rooms'&&part[2]==='messages'){
    const roomId=decodeURIComponent(part[1]);await assertRoom(roomId,user.id);const before=Number(url.searchParams.get('before')||Number.MAX_SAFE_INTEGER);
@@ -27,7 +27,7 @@ export async function POST(request:Request){
    const channel=await db.prepare('SELECT * FROM rooms WHERE id=?').bind(id).first();
    if(!channel)throw new ChatError(404,'チャンネルが見つかりません。');
    if(channel.kind!=='channel')throw new ChatError(400,'DMにはこの操作を行えません。');
-   if(channel.creator!==user.id)throw new ChatError(403,'チャンネルの作成者だけが変更・削除できます。');
+   if(!canManageChannel(channel as {id:unknown;kind:unknown;creator:unknown},user))throw new ChatError(403,'このチャンネルを変更・削除する権限がありません。');
    if(part[2]==='delete'){
     if(data.confirmName!==channel.name)throw new ChatError(409,'確認用のチャンネル名が一致しません。最新の名前を確認してください。');
     const result=await db.batch([

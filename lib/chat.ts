@@ -4,8 +4,8 @@ export class ChatError extends Error { constructor(public status:number, message
 export function database(){if(!env.DB) throw new ChatError(503,'データベースに接続できません。時間をおいて再試行してください。'); return env.DB;}
 export async function identity(){
  const user=await getChatGPTUser();if(!user)throw new ChatError(401,'ログインしてください。');
- const ownerEmail=(env as typeof env & {RELAY_OWNER_EMAIL?:string}).RELAY_OWNER_EMAIL?.trim().toLowerCase();
- return {id:user.userId,name:user.fullName || user.email.split('@')[0],managesInitialChannels:!!ownerEmail&&user.email.toLowerCase()===ownerEmail};
+ const ownerEmails=((env as typeof env & {RELAY_OWNER_EMAIL?:string}).RELAY_OWNER_EMAIL||'').split(',').map(email=>email.trim().toLowerCase()).filter(Boolean);
+ return {id:user.userId,name:user.fullName || user.email.split('@')[0],managesInitialChannels:ownerEmails.includes(user.email.trim().toLowerCase())};
 }
 const initialChannelIds=new Set(['channel-general','channel-development','channel-random']);
 export function canManageChannel(room:{id:unknown;kind:unknown;creator:unknown},user:{id:string;managesInitialChannels:boolean}){
